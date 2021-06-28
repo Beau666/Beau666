@@ -1,0 +1,88 @@
+import json
+import time
+from crawl_tool import get_html,get_headers,get_xpath,init_datapool
+
+import requests
+
+
+def get_html(url, headers, errorname, type='respone', data=None, timeout=30, num=10, proxy=None, allow_redirects=False):
+    for n in range(0, num):
+        try:
+            html = requests.get(url, headers=headers, data=data, timeout=timeout, verify=False, proxies=proxy,
+                                allow_redirects=allow_redirects)
+            html.encoding = html.apparent_encoding
+            if html.status_code == 200:
+                if type == 'json':
+                    return json.loads(html.text)
+                else:
+                    return html
+            else:
+                continue
+        except Exception as e:
+            print(e)
+            print(url)
+            pass
+    print('url get error')
+    with open(errorname, 'a+') as f:
+        f.write('s-url error:' + url + '     ' + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + '\n')
+        f.close()
+    return 'error'
+
+
+def post_html(url, headers, errorname, data='', type='respone', timeout=10, num=3, proxy=None):
+    for n in range(0, num):
+        try:
+            if data == '':
+                html = requests.post(url, headers=headers, timeout=timeout, verify=False, proxies=proxy)
+            else:
+                html = requests.post(url, headers=headers, data=data, verify=False, timeout=timeout, proxies=proxy)
+            html.encoding = html.apparent_encoding
+
+            if html.status_code == 200:
+                if type == 'json':
+                    return json.loads(html.text)
+                else:
+                    return html
+            else:
+                continue
+        except Exception as e:
+            print('e', e)
+            pass
+    print('url post error')
+    with open(errorname, 'a+') as f:
+        f.write('s-url error:' + url + '     ' + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + '\n')
+        f.close()
+    return 'error'
+
+sql = init_datapool(host='127.0.0.1', username='root',
+                         password='123456', db='new_huaqiu', pool_db=True,drop_column=["id", "updated",'entid'])
+
+url = "https://opinion.huanqiu.com/api/list?node=%22/e3pmub6h5/e3pmub75a%22,%22/e3pmub6h5/e3pn00if8%22,%22/e3pub6h5/e3pn03vit%22,%22/e3pmub6h5/e3pn4bi4t%22,%22/e3pmub6h5/e3pr9baf6%22,%22/e3pmub6h5/e3prafm0g%22,%22/e3pmub6h5/e3prcgifj%22,%22/e3pmub6h5/e81curi71%22,%22/e3pmub6h5/e81cv14rf%22,%22/e3pmub6h5/e81cv14rf/e81cv52ha%22,%22/e3pmub6h5/e81cv14rf/e81cv7hp0%22,%22/e3pmub6h5/e81cv14rf/e81cvaa3q%22,%22/e3pmub6h5/e81cv14rf/e81cvcd7e%22&offset={}&limit=20"
+url = "https://oversea.huanqiu.com/api/list?node=%22/e3pmt7bdh/e3pn4bc7q%22,%22/e3pmt7bdh/e3pn5250c%22,%22/e3pmt7bdh/e3pn6g8t8%22&offset={}&limit=20"
+url = "https://world.huanqiu.com/api/list?node=%22/e3pmh22ph/e3pmh2398%22,%22/e3pmh22ph/e3pmh26vv%22,%22/e3pmh22ph/e3pn6efsl%22,%22/e3pmh22ph/efp8fqe21%22&offset={}&limit=20"
+def getdata(url,aid):
+    item = {}
+    print(url)
+    htmldata = get_html(url,headers=get_headers(),errorname="de.txt")
+    item["aid"] = aid
+    item["title"] = get_xpath(htmldata.text,"//div[@class='t-container-title']//text()","txt")
+    item["time"] = get_xpath(htmldata.text,"//div[@class='metadata-info']//p[@class='time']//text()","txt")[:10]
+    item["content"] = get_xpath(htmldata.text,"//div[@class='l-con clear']//text()","txt")
+    if item["title"] == "":
+        return
+    sql.insert_data(item,"news")
+    print(item)
+
+
+
+
+
+for page in range(450,800):
+    st = page*20
+    lists = get_html(url.format(st),headers=get_headers(),errorname="huaqiu.txt").json()
+    for d in lists.get("list"):
+        if "美国" in str(d) and "环球时报" in str(d):
+            getdata("https://world.huanqiu.com/article/{}".format(d.get("aid")),d.get("aid"))
+            pass
+
+
