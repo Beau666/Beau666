@@ -1,0 +1,104 @@
+import re
+import time
+from crawl_tool import get_html,get_headers,get_xpath,init_datapool,post_html
+import json
+
+
+def get_html(url, headers, errorname, type='respone', data=None, timeout=30, num=10, proxy=None, allow_redirects=False):
+    for n in range(0, num):
+        try:
+            html = requests.get(url, headers=headers, data=data, timeout=timeout, verify=False, proxies=proxy,
+                                allow_redirects=allow_redirects)
+            html.encoding = html.apparent_encoding
+            if html.status_code == 200:
+                if type == 'json':
+                    return json.loads(html.text)
+                else:
+                    return html
+            else:
+                continue
+        except Exception as e:
+            print(e)
+            print(url)
+            pass
+    print('url get error')
+    with open(errorname, 'a+') as f:
+        f.write('s-url error:' + url + '     ' + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + '\n')
+        f.close()
+    return 'error'
+
+
+def post_html(url, headers, errorname, data='', type='respone', timeout=10, num=3, proxy=None):
+    for n in range(0, num):
+        try:
+            if data == '':
+                html = requests.post(url, headers=headers, timeout=timeout, verify=False, proxies=proxy)
+            else:
+                html = requests.post(url, headers=headers, data=data, verify=False, timeout=timeout, proxies=proxy)
+            html.encoding = html.apparent_encoding
+
+            if html.status_code == 200:
+                if type == 'json':
+                    return json.loads(html.text)
+                else:
+                    return html
+            else:
+                continue
+        except Exception as e:
+            print('e', e)
+            pass
+    print('url post error')
+    with open(errorname, 'a+') as f:
+        f.write('s-url error:' + url + '     ' + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + '\n')
+        f.close()
+    return 'error'
+
+sql = init_datapool(host='127.0.0.1', username='root',
+                         password='123456', db='new_huaqiu', pool_db=True,drop_column=["id", "updated",'entid'])
+
+
+import requests
+
+url = "http://search.people.cn/api-search/elasticSearch/search"
+
+payload = {"key":"美国","page":10,"limit":10,"hasTitle":True,"hasContent":True,"isFuzzy":True,"type":0,"sortType":0,"startTime":0,"endTime":0}
+headers = {
+  'Accept': 'application/json, text/plain, */*',
+  'Content-Type': 'application/json;charset=UTF-8',
+  'Host': 'search.people.cn',
+  'Origin': 'http://search.people.cn',
+  'Pragma': 'no-cache',
+  'Referer': 'http://search.people.cn/s?keyword=%E7%BE%8E%E5%9B%BD%20%E4%BA%BA%E6%B0%91%E6%97%A5%E6%8A%A5&st=0&_=1623724102505',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.106 Safari/537.36',
+}
+
+def getinfo(url,aid):
+    print(url)
+    item = {}
+    htmldata = get_html(url,headers=get_headers(),errorname="rmde.txt")
+    item["aid"] = aid
+    item["title"] = get_xpath(htmldata.text,"//h1//text()","txt")
+    item["time"] = get_xpath(htmldata.text,"//div[@class='box01']//text()","txt")[:10].replace("年","-").replace("月","-")
+    item["content"] = get_xpath(htmldata.text,"//div[@class='box_con']//text()","txt")
+    item["type"] = "人民网"
+    if item["title"] == "":
+        return
+    if item["content"] == "":
+        return
+    sql.insert_data(item,"news")
+    print(item)
+
+
+for page in range(100,8000):
+    payload["page"] = page
+    response =  post_html(url, headers=headers, data=json.dumps(payload),errorname="rm.txt").json()
+    for data in response.get("data").get("records"):
+        if "美国" in str(data) and "人民日报" in str(data):
+            try:
+                getinfo(data.get("url"),data.get("url").split("-")[-1].replace(".html",""))
+            except:
+                pass
+            pass
+
+
+print(response.text)
